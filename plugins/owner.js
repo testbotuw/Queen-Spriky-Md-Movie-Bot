@@ -1,6 +1,8 @@
 const { exec } = require('child_process');
 const { cmd, commands } = require('../command');
+const EnvVar = require('../lib/mongodbenv');
 const fs = require('fs');
+const {readEnv} = require('../lib/database')
 const path = require('path');
 
 //-----------------------------------------------Leave Group-----------------------------------------------
@@ -133,6 +135,109 @@ async (conn, mek, m, { from, reply, isOwner }) => {
     }
 });
 
+//-----------------------------------------------212 Number Block-----------------------------------------------
+
+cmd({
+    on: "body"
+},
+async (conn, mek, m, { from, body, isOwner }) => {
+    const config = await readEnv();
+    if (config.AUTO_BLock_212 === true) {
+        if (m.sender.startsWith('212')) {
+            await conn.updateBlockStatus(m.sender, 'block');
+            await conn.sendMessage(from, { text: `User ${m.sender} has been blocked.` }, { quoted: mek });
+            return;
+        }
+    }
+});
+
+//-----------------------------------------------212 Number Auto Remove-----------------------------------------------
+
+cmd({
+    on: "group"
+},
+async (conn, mek, m, { from, body, isOwner }) => {
+    if (config.AUTO_KICK_212 === true) {
+        if (m.isGroup && m.sender.startsWith('212')) {
+            await conn.groupParticipantsUpdate(m.chat, [m.sender], 'remove');
+            await conn.sendMessage(from, { text: `User ${m.sender} has been removed from the group.` }, { quoted: mek });
+            return;
+        }
+    }
+});
+
+//-----------------------------------------------Save or Retrieve Status-----------------------------------------------
+cmd({
+    pattern: 'save',
+    desc: 'Saves media from a status or message to your device.',
+    category: 'media',
+    react: '💾',
+    filename: __filename
+}, async (conn, mek, m, { from, reply, args }) => {
+    try {
+        const senderNumber = m.sender;
+        const isGroup = m.isGroup || false;
+
+        if (!m.quoted) {
+            return reply("Please reply to a status or message with media that you want to save.");
+        }
+
+        const quotedMsg = m.quoted;
+
+        const mediaType = quotedMsg.type || quotedMsg.mtype;
+        let mediaData;
+        let fileExtension = '';
+        let mimeType = '';
+
+        switch (mediaType) {
+            case 'imageMessage':
+                mediaData = await quotedMsg.download() || await conn.downloadMediaMessage(quotedMsg);
+                fileExtension = 'jpg';
+                mimeType = 'image/jpeg';
+                break;
+            case 'videoMessage':
+                mediaData = await quotedMsg.download() || await conn.downloadMediaMessage(quotedMsg);
+                fileExtension = 'mp4';
+                mimeType = 'video/mp4';
+                break;
+            case 'audioMessage':
+                mediaData = await quotedMsg.download() || await conn.downloadMediaMessage(quotedMsg);
+                fileExtension = 'ogg';
+                mimeType = 'audio/ogg';
+                break;
+            case 'documentMessage':
+                mediaData = await quotedMsg.download() || await conn.downloadMediaMessage(quotedMsg);
+                fileExtension = quotedMsg.fileName ? quotedMsg.fileName.split('.').pop() : 'bin';
+                mimeType = quotedMsg.mimetype || 'application/octet-stream';
+                break;
+            default:
+                return reply("The replied message does not contain supported media. Please reply to an image, video, audio, or document.");
+        }
+
+        if (!mediaData) {
+            return reply("Failed to download the media.");
+        }
+
+        const mediaDir = path.join(__dirname, 'media');
+        if (!fs.existsSync(mediaDir)) {
+            fs.mkdirSync(mediaDir);
+        }
+
+        const filename = `🌟Queen Spriky MD🌟 | ${Date.now()}.${fileExtension}`;
+
+        const filePath = path.join(mediaDir, filename);
+        fs.writeFileSync(filePath, mediaData);
+
+        await conn.sendMessage(from, { document: fs.readFileSync(filePath), mimetype: mimeType, fileName: filename }, { quoted: m });
+
+        reply(`*✅ Status Saved*`);
+        console.log('Media saved successfully');
+    } catch (e) {
+        console.error('Error executing media saver command:', e);
+        reply('⚠️ An error occurred while saving the media.');
+    }
+});
+
 cmd({
     pattern: "block",
     desc: "Block a user.",
@@ -171,4 +276,74 @@ async (conn, mek, m, { from, isOwner, quoted, reply }) => {
     } catch (error) {
         reply(`❌ Error unblocking user: ${error.message}`);
     }
+});
+
+cmd({
+    pattern: "fullpp",
+    desc: "Change the bot's profile picture",
+    category: "owner",
+    react: "✅",
+    filename: __filename
+},
+async (conn, mek, m, { from, isOwner, reply, quoted, botNumber }) => {
+    if (!isOwner) {
+        if (!isOwner) return reply('You are not authorized to use this command.');
+    }
+    if (!quoted || !quoted.imageMessage) {
+        return reply('❌ Please reply to an image to set it as the profile picture.');
+    }
+
+    try {
+        let media = await conn.downloadAndSaveMediaMessage(quoted);
+        const { img } = await generateProfilePicture(media);
+        await conn.query({
+            tag: 'iq',
+            attrs: {
+                to: botNumber,
+                type: 'set',
+                xmlns: 'w:profile:picture'
+            },
+            content: [{
+                tag: 'picture',
+                attrs: {
+                    type: 'image'
+                },
+                content: img
+            }]
+        });
+        fs.unlinkSync(media);
+        reply("*✅ Bot Profile Picture Updated Successfully!*");
+
+    } catch (err) {
+        reply(`❌ Error: ${err.message}`);
+    }
+});
+
+cmd({
+  pattern: "updatecmd",
+  react: "🧞",
+  desc: "Update commands.",
+  category: "owner",
+  filename: __filename
+},
+async (conn, mek, m, {reply}) => {
+  try {
+    if (!isOwner) return reply("Only bot owners can use this command.");
+    
+    const pluginsDir = path.join(__dirname, '../plugins');
+    const files = fs.readdirSync(pluginsDir);
+    
+    for (const file of files) {
+      if (file.endsWith('.js')) {
+        const filePath = path.join(pluginsDir, file);
+        require(filePath);
+        console.log(`Loaded ${file}`);
+      }
+    }
+    
+    reply("Commands updated successfully.");
+  } catch (e) {
+    console.log(e);
+    reply(`Error updating commands: ${e.message}`);
+  }
 });

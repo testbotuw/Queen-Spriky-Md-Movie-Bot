@@ -11,7 +11,6 @@ const axios = require('axios');
 const { File } = require('megajs');
 const moment = require('moment-timezone');
 const ownerNumber = [`${config.Owner}`];
-const prefix = config.PREFIX;
 
 if (!fs.existsSync(__dirname + '/auth_info_baileys/creds.json')) {
     if (!config.SESSION_ID) return console.log('Please add your session to SESSION_ID env !!');
@@ -30,6 +29,12 @@ const app = express();
 const port = process.env.PORT || 8000;
 
 async function connectToWA() {
+    const connectDB = require('./lib/mongodb');
+    connectDB();
+    
+    const { readEnv } = require('./lib/database');
+    const config = await readEnv();
+    const prefix = config.PREFIX;
     console.log("Connecting Queen Spriky MD 👣...");
 
     const { state, saveCreds } = await useMultiFileAuthState(__dirname + '/auth_info_baileys/');
@@ -43,6 +48,31 @@ async function connectToWA() {
         auth: state,
         version
     });
+
+    let work;
+    switch (config.MODE) {
+        case 'public':
+            work = '𝙿𝚄𝙱𝙻𝙸𝙲🌎';
+            break;
+        case 'private':
+            work = '𝙿𝚁𝙸𝚅𝙰𝚃𝙴👤';
+            break;
+        case 'groups':
+            work = '𝙶𝚁𝙾𝚄𝙿 𝙾𝙽𝙻𝚈👥';
+            break;
+        case 'inbox':
+            work = '𝙸𝙽𝙱𝙾𝚇 𝙾𝙽𝙻𝚈🫂';
+            break;
+        default:
+            work = '𝚄𝙽𝙺𝙾𝚆𝙽🛑';
+    }
+
+    let autoStatus = config.AUTO_READ_STATUS === 'true' ? '♻️ 𝙾𝙽' : '🚫 𝙾𝙵𝙵';
+    let autoVoice = config.AUTO_VOICE === 'true' ? '♻️ 𝙾𝙽' : '🚫 𝙾𝙵𝙵';
+    let OWNER_REACT = config.OWNER_REACT === 'true' ? '♻️ 𝙾𝙽' : '🚫 𝙾𝙵𝙵';
+    let AutoTyping = config.AutoTyping === 'true' ? '♻️ 𝙾𝙽' : '🚫 𝙾𝙵𝙵';
+    let AUTO_READ_CMD = config.AUTO_READ_CMD === 'true' ? '♻️ 𝙾𝙽' : '🚫 𝙾𝙵𝙵';
+    let WELCOME = config.WELCOME === 'true' ? '♻️ 𝙾𝙽' : '🚫 𝙾𝙵𝙵';
 
     conn.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect } = update;
@@ -67,6 +97,16 @@ async function connectToWA() {
 
 ⚡ 𝙿𝚁𝙴𝙵𝙸𝚇: ${config.PREFIX}
 👤 𝙾𝚆𝙽𝙴𝚁: @${ownerNumber}
+
+┃━━━━━━━━━━━━━━━━━━━━━━━┃
+┣━💼 *Work Mode* : *${work}*
+┣━🔊 *Auto Voice* : *${autoVoice}*
+┣━📝 *Auto Status* : *${autoStatus}*
+┣━🎯 *Owner React* : *${OWNER_REACT}*
+┣━⌨️ *Auto Typing* : *${AutoTyping}*
+┣━🛠️ *Auto Read Command* : *${AUTO_READ_CMD}*
+┣━🎉 *Welcome* : *${WELCOME}*
+┃━━━━━━━━━━━━━━━━━━━━━━━┃
 
 📢 𝗦𝗧𝗔𝗬 𝗖𝗢𝗡𝗡𝗘𝗖𝗧𝗘𝗗 𝗪𝗜𝗧𝗛 𝗨𝗦 𝗙𝗢𝗥 𝗨𝗣𝗗𝗔𝗧𝗘𝗦!
 
@@ -115,6 +155,122 @@ https://github.com/uwtechshow-official/Queen-Spriky-MD
 
     console.log("JID:", jid + "Message:", messageContent);
 
+ //==================================================================================================
+        conn.sendButtonMessage = async (jid, buttons, opts = {}) => {
+
+            let header;
+            if (opts?.video) {
+                var video = await prepareWAMessageMedia({
+                    video: {
+                        url: opts && opts.video ? opts.video : ''
+                    }
+                }, {
+                    upload: conn.waUploadToServer
+                })
+                header = {
+                    title: opts && opts.header ? opts.header : '',
+                    hasMediaAttachment: true,
+                    videoMessage: video.videoMessage,
+                }
+      
+            } else if (opts?.image) {
+                var image = await prepareWAMessageMedia({
+                    image: {
+                        url: opts && opts.image ? opts.image : ''
+                    }
+                }, {
+                    upload: conn.waUploadToServer
+                })
+                header = {
+                    title: opts && opts.header ? opts.header : '',
+                    hasMediaAttachment: true,
+                    imageMessage: image.imageMessage,
+                }
+      
+            } else {
+                header = {
+                    title: opts && opts.header ? opts.header : '',
+                    hasMediaAttachment: false,
+                }
+            }
+            let interactiveMessage;
+            if (opts && opts.contextInfo) {
+                interactiveMessage = {
+                    body: {
+                        text: opts && opts.body ? opts.body : ''
+                    },
+                    footer: {
+                        text: opts && opts.footer ? opts.footer : ''
+                    },
+                    header: header,
+                    nativeFlowMessage: {
+                        buttons: buttons,
+                        messageParamsJson: ''
+                    },
+                    contextInfo: opts && opts.contextInfo ? opts.contextInfo : ''
+                }
+            } else {
+                interactiveMessage = {
+                    body: {
+                        text: opts && opts.body ? opts.body : ''
+                    },
+                    footer: {
+                        text: opts && opts.footer ? opts.footer : ''
+                    },
+                    header: header,
+                    nativeFlowMessage: {
+                        buttons: buttons,
+                        messageParamsJson: ''
+                    }
+                }
+            }
+      
+            let message = generateWAMessageFromContent(jid, {
+                viewOnceMessage: {
+                    message: {
+                        messageContextInfo: {
+                            deviceListMetadata: {},
+                            deviceListMetadataVersion: 2,
+                        },
+                        interactiveMessage: interactiveMessage
+                    }
+                }
+            }, {
+      
+            })
+      
+            return await conn.relayMessage(jid, message["message"], {
+                messageId: message.key.id
+            })
+        }
+
+        conn.ev.on('messages.upsert', async (m) => {
+            const messages = m.messages || [];
+            for (const message of messages) {
+                try {
+                    if (!message || !message.key || !message.message) continue;
+        
+                    const type = getContentType(message.message);
+                    const btnResponse = (type === 'interactiveResponseMessage') ? message.message.interactiveResponseMessage : null;
+        
+                    if (btnResponse) {
+                        const buttonId = btnResponse.buttonId;
+                        console.log(`Button clicked with ID: ${buttonId}`);
+                    }
+    
+                    if (message.message.conversation) {
+                        await handleCommands(message.key.remoteJid, message.message.conversation, conn);
+                    }
+        
+                } catch (error) {
+                    console.error('Error handling message:', error);
+                }
+            }
+        });
+
+        
+    //==================================================================================================
+
 //=================================================================================
 
         mek.message = (getContentType(mek.message) === 'ephemeralMessage') ? mek.message.ephemeralMessage.message : mek.message;
@@ -122,6 +278,7 @@ https://github.com/uwtechshow-official/Queen-Spriky-MD
         if (mek.key && mek.key.remoteJid === 'status@broadcast' && config.AUTO_READ_STATUS === "true") {
             await conn.readMessages([mek.key]);
         }
+//=========================================================================================
 
         const m = sms(conn, mek);
         const type = getContentType(mek.message);
@@ -138,7 +295,7 @@ https://github.com/uwtechshow-official/Queen-Spriky-MD
         const args = body.trim().split(/ +/).slice(1);
         const q = args.join(' ');
         const isGroup = from.endsWith('@g.us');
-        const sender = mek.key.fromMe ? (conn.user.id.split(':')[0] + '@s.whatsapp.net' || conn.user.id) : (mek.key.participant || mek.key.remoteJid);
+        const sender = mek.key.fromMe ? (conn.user.id.split(':')[0] + '@s.whatsapp.net' || conn.user.id) : (mek.key.participant || mek.key.remoteJid)
         const senderNumber = sender.split('@')[0];
         const botNumber = conn.user.id.split(':')[0];
         const pushname = mek.pushName || 'Sin Nombre';
@@ -151,6 +308,13 @@ https://github.com/uwtechshow-official/Queen-Spriky-MD
         const groupAdmins = isGroup ? await getGroupAdmins(participants) : [];
         const isBotAdmins = isGroup ? groupAdmins.includes(botNumber2) : false;
         const isAdmins = isGroup ? groupAdmins.includes(sender) : false;
+        const isAnti = (teks) => {
+            let getdata = teks
+            for (let i = 0; i < getdata.length; i++) {
+                if (getdata[i] === from) return true
+            }
+            return false
+        }
         const isReact = m.message.reactionMessage ? true : false;
 
         const reply = (teks) => {
@@ -178,6 +342,14 @@ https://github.com/uwtechshow-official/Queen-Spriky-MD
                 return conn.sendMessage(jid, { audio: await getBuffer(url), caption: caption, mimetype: 'audio/mpeg', ...options }, { quoted: quoted, ...options });
             }
         };
+//===================================Owner React=========================================
+
+        if (config.OWNER_REACT === "true") {
+            if (senderNumber.includes(ownerNumber)) {
+                if (isReact) return;
+                m.react("🤖");
+            }
+        }
 
 //===================================Work Type========================================= 
 
@@ -196,6 +368,83 @@ if (isCmd && config.AUTO_READ_CMD === "true") {
 if (isCmd && config.AutoTyping === "true") {
     await conn.sendPresenceUpdate('composing', from)
 }
+
+/*conn.sendButtonMessage = async (jid, buttons, quoted, opts = {}) => {
+
+    let header;
+    if (opts?.image) {
+        var image = await prepareWAMessageMedia({
+            image: {
+                url: opts && opts.image ? opts.image : ''
+            }
+        }, {
+            upload: conn.waUploadToServer
+        })
+        header = {
+            title: opts && opts.header ? opts.header : '',
+            hasMediaAttachment: true,
+            imageMessage: image.imageMessage,
+        }
+
+    } else {
+        header = {
+            title: opts && opts.header ? opts.header : '',
+            hasMediaAttachment: false,
+        }
+    }
+
+
+    let message = generateWAMessageFromContent(jid, {
+        viewOnceMessage: {
+            message: {
+                messageContextInfo: {
+                    deviceListMetadata: {},
+                    deviceListMetadataVersion: 2,
+                },
+                interactiveMessage: {
+                    body: {
+                        text: opts && opts.body ? opts.body : ''
+                    },
+                    footer: {
+                        text: opts && opts.footer ? opts.footer : ''
+                    },
+                    header: header,
+                    nativeFlowMessage: {
+                        buttons: buttons,
+                        messageParamsJson: ''
+                     },
+        contextInfo: {
+mentionedJid: [ '' ],
+groupMentions: [],
+forwardingScore: 999,
+isForwarded: true,
+forwardedNewsletterMessageInfo: {
+newsletterJid: '',
+newsletterName: "",
+serverMessageId: 999
+},
+externalAdReply: { 
+title: '𝘔𝘌𝘋𝘡 𝘔𝘋 2024',
+body: 'ᴡᴏʀʟᴅ ʙᴇꜱᴛ ᴡʜᴀᴛꜱᴀᴘᴘ ʙᴏᴛ',
+mediaType: 1,
+sourceUrl: "https://github.com/" ,
+thumbnailUrl: '' ,
+renderLargerThumbnail: true,
+showAdAttribution: true
+              }
+                
+                    }
+                }
+            }
+        }
+    }, {
+        quoted: quoted
+    })
+
+    conn.relayMessage(jid, message["message"], {
+        messageId: message.key.id
+    })
+}*/
 
 //==================================================================
         const events = require('./command');
